@@ -2,9 +2,20 @@
 
 Web-based synchronized lyrics editor for creating LRC files while playing audio.
 
-## Current Prototype
+## Development
 
-Open `index.html` in a browser.
+```bash
+npm install
+npm run dev
+```
+
+For a production build:
+
+```bash
+npm run build
+```
+
+## Current Prototype
 
 - Load a local audio file.
 - Type or paste lyrics into the lyrics box. Blank lines are removed automatically.
