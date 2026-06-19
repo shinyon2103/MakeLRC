@@ -1,0 +1,298 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-strong: #eef3f6;
+  --ink: #16181d;
+  --muted: #606873;
+  --line: #d8dee5;
+  --accent: #176b5b;
+  --accent-strong: #0d4f43;
+  --focus: #d69128;
+  --danger: #a33a2c;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  min-height: 100%;
+  touch-action: manipulation;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  overscroll-behavior: none;
+}
+
+button,
+select,
+textarea,
+input {
+  font: inherit;
+}
+
+button,
+select {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+button {
+  padding: 0 14px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.tap-zone:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus), transparent 35%);
+  outline-offset: 2px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.app-shell {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+
+.workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.topbar,
+.audio-panel,
+.lyrics-panel,
+.timing-panel,
+.preview-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1rem;
+}
+
+.topbar p,
+.panel-heading span,
+.options-row label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.topbar-actions,
+.panel-heading,
+.options-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audio-panel {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 12px;
+  padding: 12px;
+  align-items: center;
+}
+
+.file-picker {
+  display: grid;
+  place-items: center;
+  min-height: 48px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  color: var(--accent-strong);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.file-picker input {
+  display: none;
+}
+
+audio {
+  width: 100%;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 14px;
+}
+
+.lyrics-panel,
+.timing-panel,
+.preview-panel {
+  padding: 12px;
+}
+
+.lyrics-panel,
+.preview-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.timing-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.timing-display {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+#currentTime {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2rem, 8vw, 4rem);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent-strong);
+}
+
+#activeLine {
+  display: block;
+  min-height: 2.9em;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.tap-zone {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.tap-zone:active {
+  background: var(--accent-strong);
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.control-grid button:nth-child(2) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.options-row {
+  justify-content: space-between;
+}
+
+.options-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+select {
+  padding: 0 34px 0 10px;
+}
+
+#outputPreview {
+  min-height: 220px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 780px) {
+  .app-shell {
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+
+  .topbar,
+  .audio-panel,
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: stretch;
+  }
+
+  .topbar-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .editor-grid {
+    display: grid;
+  }
+
+  textarea {
+    min-height: 220px;
+    font-size: 16px;
+  }
+
+  .control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

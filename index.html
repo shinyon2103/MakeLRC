@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>MakeLRC</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace" aria-label="同期歌詞エディタ">
+        <header class="topbar">
+          <div>
+            <h1>MakeLRC</h1>
+            <p id="saveStatus">未保存</p>
+          </div>
+          <div class="topbar-actions">
+            <button id="copyOutputButton" type="button">コピー</button>
+            <button id="downloadButton" type="button">LRC保存</button>
+          </div>
+        </header>
+
+        <section class="audio-panel" aria-label="音源">
+          <label class="file-picker">
+            <span>音源を選択</span>
+            <input id="audioFileInput" type="file" accept="audio/*" />
+          </label>
+          <audio id="audioPlayer" controls playsinline preload="metadata"></audio>
+        </section>
+
+        <section class="editor-grid">
+          <section class="lyrics-panel" aria-label="歌詞入力">
+            <div class="panel-heading">
+              <h2>歌詞</h2>
+              <button id="pasteButton" type="button">ペースト</button>
+            </div>
+            <textarea
+              id="lyricsInput"
+              spellcheck="false"
+              placeholder="ここに歌詞を入力またはペースト"
+            ></textarea>
+          </section>
+
+          <section class="timing-panel" aria-label="タイミング作成">
+            <div class="timing-display">
+              <span id="currentTime">00:00.00</span>
+              <strong id="activeLine">歌詞を入力してください</strong>
+            </div>
+            <div class="tap-zone" id="tapZone" role="button" tabindex="0" aria-label="現在の行にタイムスタンプ">
+              <span>タップで打刻</span>
+            </div>
+            <div class="control-grid">
+              <button id="playPauseButton" type="button">再生/停止</button>
+              <button id="stampButton" type="button">打刻</button>
+              <button id="previousButton" type="button">戻る</button>
+              <button id="nextButton" type="button">進む</button>
+              <button id="undoButton" type="button">取消</button>
+              <button id="redoButton" type="button">やり直し</button>
+            </div>
+            <div class="options-row">
+              <label>
+                出力
+                <select id="formatSelect">
+                  <option value="lrc">LRC</option>
+                  <option value="enhanced-lrc">Enhanced LRC</option>
+                  <option value="webvtt">WebVTT</option>
+                  <option value="srt">SRT</option>
+                </select>
+              </label>
+              <button id="clearTimingsButton" type="button">時刻クリア</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="preview-panel" aria-label="出力プレビュー">
+          <div class="panel-heading">
+            <h2>出力</h2>
+            <span id="lineCount">0行</span>
+          </div>
+          <textarea id="outputPreview" readonly spellcheck="false"></textarea>
+        </section>
+      </section>
+    </main>
+    <script src="./src/app.js"></script>
+  </body>
+</html>
