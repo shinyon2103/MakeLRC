@@ -124,7 +124,10 @@ export function App() {
   const [audioUrl, setAudioUrl] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const outputPreviewRef = useRef<HTMLDivElement | null>(null);
   const activeOutputRef = useRef<HTMLDivElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const displayedCentisecondRef = useRef(-1);
 
   const output = useMemo(() => buildOutput(lines, timings, format), [format, lines, timings]);
   const activeLine = lines[activeIndex] ?? "歌詞を入力してください";
@@ -137,6 +140,42 @@ export function App() {
     setRedoStack([]);
   }, [activeIndex, timings]);
 
+  const releaseButtonFocus = useCallback(() => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLButtonElement) {
+      activeElement.blur();
+    }
+  }, []);
+
+  const syncCurrentTime = useCallback((force = false) => {
+    const nextTime = audioRef.current?.currentTime ?? 0;
+    const nextCentisecond = Math.round(nextTime * 100);
+    if (force || nextCentisecond !== displayedCentisecondRef.current) {
+      displayedCentisecondRef.current = nextCentisecond;
+      setCurrentTime(nextTime);
+    }
+  }, []);
+
+  const stopTimeLoop = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+  }, []);
+
+  const startTimeLoop = useCallback(() => {
+    stopTimeLoop();
+
+    const tick = () => {
+      syncCurrentTime();
+      if (!audioRef.current?.paused) {
+        animationFrameRef.current = window.requestAnimationFrame(tick);
+      }
+    };
+
+    animationFrameRef.current = window.requestAnimationFrame(tick);
+  }, [stopTimeLoop, syncCurrentTime]);
+
   const updateLyrics = useCallback((value: string) => {
     const normalized = normalizeLyrics(value);
     const nextLines = parseLines(normalized);
@@ -148,6 +187,7 @@ export function App() {
 
   const stampCurrentLine = useCallback(() => {
     if (!lines.length) return;
+    releaseButtonFocus();
     pushUndo();
     const audio = audioRef.current;
     setTimings((current) => {
@@ -156,10 +196,11 @@ export function App() {
       return next;
     });
     setActiveIndex((index) => clampLineIndex(index + 1, lines.length));
-  }, [activeIndex, lines.length, pushUndo]);
+  }, [activeIndex, lines.length, pushUndo, releaseButtonFocus]);
 
   const retakeCurrentLine = useCallback(() => {
     if (!lines.length) return;
+    releaseButtonFocus();
     const audio = audioRef.current;
     if (!audio) return;
     const currentStamp = timings[activeIndex];
@@ -167,22 +208,25 @@ export function App() {
       ? Math.max(0, (currentStamp ?? 0) - RETAKE_MARGIN_SECONDS)
       : Math.max(0, audio.currentTime - RETAKE_MARGIN_SECONDS);
     setSaveStatus("打ち直し準備");
-    setCurrentTime(audio.currentTime);
-    void audio.play().catch(() => undefined);
-  }, [activeIndex, lines.length, timings]);
+    syncCurrentTime(true);
+    void audio.play().then(startTimeLoop).catch(() => undefined);
+  }, [activeIndex, lines.length, releaseButtonFocus, startTimeLoop, syncCurrentTime, timings]);
 
   const moveActive = useCallback((delta: number) => {
+    releaseButtonFocus();
     setActiveIndex((index) => clampLineIndex(index + delta, lines.length));
-  }, [lines.length]);
+  }, [lines.length, releaseButtonFocus]);
 
   const seekBy = useCallback((delta: number) => {
     const audio = audioRef.current;
     if (!audio) return;
+    releaseButtonFocus();
     audio.currentTime = Math.max(0, audio.currentTime + delta);
-    setCurrentTime(audio.currentTime);
-  }, []);
+    syncCurrentTime(true);
+  }, [releaseButtonFocus, syncCurrentTime]);
 
   const undo = useCallback(() => {
+    releaseButtonFocus();
     setUndoStack((stack) => {
       const snapshot = stack.at(-1);
       if (!snapshot) return stack;
@@ -191,9 +235,10 @@ export function App() {
       setActiveIndex(clampLineIndex(snapshot.activeIndex, lines.length));
       return stack.slice(0, -1);
     });
-  }, [activeIndex, lines.length, timings]);
+  }, [activeIndex, lines.length, releaseButtonFocus, timings]);
 
   const redo = useCallback(() => {
+    releaseButtonFocus();
     setRedoStack((stack) => {
       const snapshot = stack.at(-1);
       if (!snapshot) return stack;
@@ -202,23 +247,26 @@ export function App() {
       setActiveIndex(clampLineIndex(snapshot.activeIndex, lines.length));
       return stack.slice(0, -1);
     });
-  }, [activeIndex, lines.length, timings]);
+  }, [activeIndex, lines.length, releaseButtonFocus, timings]);
 
   const clearTimings = useCallback(() => {
+    releaseButtonFocus();
     pushUndo();
     setTimings([]);
     setActiveIndex(0);
-  }, [pushUndo]);
+  }, [pushUndo, releaseButtonFocus]);
 
   const togglePlayback = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    releaseButtonFocus();
     if (audio.paused) {
-      void audio.play().catch(() => setSaveStatus("再生できません"));
+      void audio.play().then(startTimeLoop).catch(() => setSaveStatus("再生できません"));
     } else {
       audio.pause();
+      syncCurrentTime(true);
     }
-  }, []);
+  }, [releaseButtonFocus, startTimeLoop, syncCurrentTime]);
 
   const pasteLyrics = useCallback(async () => {
     if (!navigator.clipboard?.readText) return;
@@ -270,8 +318,47 @@ export function App() {
   }, [activeIndex, format, lyrics, timings]);
 
   useEffect(() => {
-    activeOutputRef.current?.scrollIntoView({ block: "nearest" });
+    const container = outputPreviewRef.current;
+    const activeLineElement = activeOutputRef.current;
+    if (!container || !activeLineElement) return;
+
+    const itemTop = activeLineElement.offsetTop;
+    const itemBottom = itemTop + activeLineElement.offsetHeight;
+    const visibleTop = container.scrollTop;
+    const visibleBottom = visibleTop + container.clientHeight;
+
+    if (itemTop < visibleTop) {
+      container.scrollTop = itemTop;
+    } else if (itemBottom > visibleBottom) {
+      container.scrollTop = itemBottom - container.clientHeight;
+    }
   }, [activeIndex]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+
+    const onPlay = () => startTimeLoop();
+    const onPause = () => {
+      stopTimeLoop();
+      syncCurrentTime(true);
+    };
+    const onSeeked = () => syncCurrentTime(true);
+    const onLoadedMetadata = () => syncCurrentTime(true);
+
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
+    audio.addEventListener("seeked", onSeeked);
+    audio.addEventListener("loadedmetadata", onLoadedMetadata);
+
+    return () => {
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("seeked", onSeeked);
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      stopTimeLoop();
+    };
+  }, [startTimeLoop, stopTimeLoop, syncCurrentTime]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -339,8 +426,8 @@ export function App() {
       }
     };
 
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => document.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [moveActive, redo, retakeCurrentLine, seekBy, stampCurrentLine, togglePlayback, undo]);
 
   useEffect(() => {
@@ -417,7 +504,7 @@ export function App() {
             preload="metadata"
             src={audioUrl}
             onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-            onLoadedMetadata={(event) => setCurrentTime(event.currentTarget.currentTime)}
+            onLoadedMetadata={() => syncCurrentTime(true)}
           />
         </section>
 
@@ -473,7 +560,7 @@ export function App() {
             <h2>出力</h2>
             <span>{lines.length}行</span>
           </div>
-          <div className="output-preview" role="textbox" aria-readonly="true" tabIndex={0}>
+          <div ref={outputPreviewRef} className="output-preview" role="textbox" aria-readonly="true" tabIndex={0}>
             {!lines.length && <div className="output-empty">出力はここに表示されます。</div>}
             {lines.map((line, index) => (
               <div
