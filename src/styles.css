@@ -113,6 +113,10 @@ textarea {
   padding: 14px;
 }
 
+.brand-block {
+  min-width: 0;
+}
+
 h1,
 h2,
 p {
@@ -267,12 +271,11 @@ audio {
 
 .control-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
-.control-grid button:nth-child(2),
-.control-grid button:nth-child(3) {
+.control-grid button:nth-child(2) {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -335,8 +338,11 @@ select {
 
 @media (max-width: 780px) {
   .app-shell {
-    padding-left: max(10px, env(safe-area-inset-left));
-    padding-right: max(10px, env(safe-area-inset-right));
+    padding: max(10px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+
+  .workspace {
+    gap: 10px;
   }
 
   .topbar,
@@ -346,21 +352,103 @@ select {
   }
 
   .topbar {
-    align-items: stretch;
+    display: grid;
+    gap: 10px;
+    padding: 12px;
   }
 
   .topbar-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .topbar-actions button {
+    min-height: 40px;
+    padding: 0 8px;
+    font-size: 0.92rem;
+  }
+
+  .audio-panel,
+  .lyrics-panel,
+  .timing-panel,
+  .preview-panel,
+  .help-panel {
+    padding: 10px;
+  }
+
+  .audio-panel {
+    gap: 8px;
+  }
+
+  .file-picker {
+    min-height: 42px;
+  }
+
+  .panel-heading {
+    justify-content: space-between;
+  }
+
+  .panel-heading button {
+    min-height: 38px;
+    padding: 0 12px;
   }
 
   textarea {
-    min-height: 220px;
+    min-height: 170px;
     font-size: 16px;
+  }
+
+  .timing-panel {
+    gap: 10px;
+  }
+
+  .timing-display {
+    min-height: 88px;
+    padding: 12px;
+  }
+
+  #currentTime {
+    font-size: 2.2rem;
+  }
+
+  #activeLine {
+    min-height: 2.4em;
+  }
+
+  .tap-zone {
+    min-height: 112px;
+    font-size: 1.15rem;
   }
 
   .control-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .control-grid button {
+    min-height: 42px;
+    padding: 0 10px;
+  }
+
+  .options-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .options-row label {
+    justify-content: space-between;
+  }
+
+  .options-row select {
+    min-width: 140px;
+  }
+
+  .output-preview {
+    min-height: 160px;
+    max-height: 34vh;
   }
 
   .shortcut-grid,

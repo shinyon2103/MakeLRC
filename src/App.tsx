@@ -119,7 +119,7 @@ export function App() {
   const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
   const [redoStack, setRedoStack] = useState<Snapshot[]>([]);
   const [format, setFormat] = useState<OutputFormat>(initialDraft?.format ?? "lrc");
-  const [saveStatus, setSaveStatus] = useState(initialDraft ? "Draft restored" : "Not saved");
+  const [saveStatus, setSaveStatus] = useState(initialDraft ? "一時保存を復元" : "未保存");
   const [currentTime, setCurrentTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
@@ -127,7 +127,7 @@ export function App() {
   const activeOutputRef = useRef<HTMLDivElement | null>(null);
 
   const output = useMemo(() => buildOutput(lines, timings, format), [format, lines, timings]);
-  const activeLine = lines[activeIndex] ?? "Enter lyrics to start";
+  const activeLine = lines[activeIndex] ?? "歌詞を入力してください";
 
   const pushUndo = useCallback(() => {
     setUndoStack((stack) => {
@@ -166,7 +166,7 @@ export function App() {
     audio.currentTime = Number.isFinite(currentStamp)
       ? Math.max(0, (currentStamp ?? 0) - RETAKE_MARGIN_SECONDS)
       : Math.max(0, audio.currentTime - RETAKE_MARGIN_SECONDS);
-    setSaveStatus("Ready to retake");
+    setSaveStatus("打ち直し準備");
     setCurrentTime(audio.currentTime);
     void audio.play().catch(() => undefined);
   }, [activeIndex, lines.length, timings]);
@@ -214,7 +214,7 @@ export function App() {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      void audio.play().catch(() => setSaveStatus("Playback failed"));
+      void audio.play().catch(() => setSaveStatus("再生できません"));
     } else {
       audio.pause();
     }
@@ -230,7 +230,7 @@ export function App() {
     if (!output) return;
     try {
       await navigator.clipboard.writeText(output);
-      setSaveStatus("Copied");
+      setSaveStatus("コピーしました");
     } catch {
       const textarea = document.createElement("textarea");
       textarea.className = "output-copy-source";
@@ -239,7 +239,7 @@ export function App() {
       textarea.select();
       document.execCommand("copy");
       textarea.remove();
-      setSaveStatus("Copied");
+      setSaveStatus("コピーしました");
     }
   }, [output]);
 
@@ -260,12 +260,12 @@ export function App() {
       try {
         const draft: Draft = { lyrics, timings, activeIndex, format };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-        setSaveStatus("Draft saved");
+        setSaveStatus("一時保存済み");
       } catch {
-        setSaveStatus("Draft save failed");
+        setSaveStatus("一時保存できません");
       }
     }, 200);
-    setSaveStatus("Saving...");
+    setSaveStatus("保存中...");
     return () => window.clearTimeout(timeout);
   }, [activeIndex, format, lyrics, timings]);
 
@@ -363,40 +363,40 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <section className="workspace" aria-label="MakeLRC editor">
+      <section className="workspace" aria-label="MakeLRC エディタ">
         <header className="topbar">
-          <div>
+          <div className="brand-block">
             <h1>MakeLRC</h1>
             <p>{saveStatus}</p>
           </div>
           <div className="topbar-actions">
             <button type="button" aria-expanded={helpOpen} onClick={() => setHelpOpen((open) => !open)}>
-              Help
+              ヘルプ
             </button>
-            <button type="button" onClick={copyOutput}>Copy</button>
-            <button type="button" onClick={downloadOutput}>Save LRC</button>
+            <button type="button" onClick={copyOutput}>コピー</button>
+            <button type="button" onClick={downloadOutput}>保存</button>
           </div>
         </header>
 
         {helpOpen && (
           <section className="help-panel">
-            <h2>Keyboard shortcuts</h2>
+            <h2>ショートカット</h2>
             <div className="shortcut-grid">
-              <span><kbd>Space</kbd></span><span>Stamp current line</span>
-              <span><kbd>Shift</kbd> + <kbd>Space</kbd></span><span>Play / pause</span>
-              <span><kbd>R</kbd></span><span>Retake current line from a little before its timestamp</span>
-              <span><kbd>ArrowUp</kbd> / <kbd>ArrowDown</kbd></span><span>Previous / next line</span>
-              <span><kbd>J</kbd> / <kbd>K</kbd></span><span>Back / forward 3 seconds</span>
-              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Z</kbd></span><span>Undo</span>
-              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Y</kbd></span><span>Redo</span>
-              <span><kbd>?</kbd></span><span>Show / hide this help</span>
+              <span><kbd>Space</kbd></span><span>現在行を打刻</span>
+              <span><kbd>Shift</kbd> + <kbd>Space</kbd></span><span>再生 / 停止</span>
+              <span><kbd>R</kbd></span><span>現在行の少し前へ戻って打ち直し</span>
+              <span><kbd>ArrowUp</kbd> / <kbd>ArrowDown</kbd></span><span>前の行 / 次の行</span>
+              <span><kbd>J</kbd> / <kbd>K</kbd></span><span>3秒戻る / 3秒進む</span>
+              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Z</kbd></span><span>取消</span>
+              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Y</kbd></span><span>やり直し</span>
+              <span><kbd>?</kbd></span><span>ヘルプを表示 / 非表示</span>
             </div>
           </section>
         )}
 
-        <section className="audio-panel" aria-label="Audio">
+        <section className="audio-panel" aria-label="音源">
           <label className="file-picker">
-            <span>Choose audio</span>
+            <span>音源を選択</span>
             <input
               type="file"
               accept="audio/*"
@@ -422,41 +422,40 @@ export function App() {
         </section>
 
         <section className="editor-grid">
-          <section className="lyrics-panel" aria-label="Lyrics input">
+          <section className="lyrics-panel" aria-label="歌詞入力">
             <div className="panel-heading">
-              <h2>Lyrics</h2>
-              <button type="button" onClick={pasteLyrics}>Paste</button>
+              <h2>歌詞</h2>
+              <button type="button" onClick={pasteLyrics}>貼り付け</button>
             </div>
             <textarea
               value={lyrics}
               spellCheck={false}
-              placeholder="Type or paste lyrics here. Blank lines are removed automatically."
+              placeholder="ここに歌詞を入力または貼り付け。空行は自動で削除されます。"
               onChange={(event) => updateLyrics(event.target.value)}
             />
           </section>
 
-          <section className="timing-panel" aria-label="Timing controls">
+          <section className="timing-panel" aria-label="タイミング操作">
             <div className="timing-display">
               <span id="currentTime">{formatLrcTime(currentTime)}</span>
               <strong id="activeLine">{activeLine}</strong>
             </div>
             <button className="tap-zone" type="button" onClick={stampCurrentLine}>
-              <span>Tap to stamp</span>
+              <span>タップで打刻</span>
             </button>
             <div className="control-grid">
-              <button type="button" onClick={togglePlayback}>Play / Pause</button>
-              <button type="button" onClick={stampCurrentLine}>Stamp</button>
-              <button type="button" onClick={retakeCurrentLine}>Retake</button>
-              <button type="button" onClick={() => moveActive(-1)}>Previous</button>
-              <button type="button" onClick={() => moveActive(1)}>Next</button>
-              <button type="button" onClick={() => seekBy(-SEEK_STEP_SECONDS)}>-3s</button>
-              <button type="button" onClick={() => seekBy(SEEK_STEP_SECONDS)}>+3s</button>
-              <button type="button" disabled={!undoStack.length} onClick={undo}>Undo</button>
-              <button type="button" disabled={!redoStack.length} onClick={redo}>Redo</button>
+              <button type="button" onClick={togglePlayback}>再生/停止</button>
+              <button type="button" onClick={retakeCurrentLine}>打ち直し</button>
+              <button type="button" onClick={() => moveActive(-1)}>前へ</button>
+              <button type="button" onClick={() => moveActive(1)}>次へ</button>
+              <button type="button" onClick={() => seekBy(-SEEK_STEP_SECONDS)}>-3秒</button>
+              <button type="button" onClick={() => seekBy(SEEK_STEP_SECONDS)}>+3秒</button>
+              <button type="button" disabled={!undoStack.length} onClick={undo}>取消</button>
+              <button type="button" disabled={!redoStack.length} onClick={redo}>やり直し</button>
             </div>
             <div className="options-row">
               <label>
-                Format
+                形式
                 <select value={format} onChange={(event) => setFormat(event.target.value as OutputFormat)}>
                   <option value="lrc">LRC</option>
                   <option value="enhanced-lrc">Enhanced LRC</option>
@@ -464,18 +463,18 @@ export function App() {
                   <option value="srt">SRT</option>
                 </select>
               </label>
-              <button type="button" onClick={clearTimings}>Clear timings</button>
+              <button type="button" onClick={clearTimings}>時刻クリア</button>
             </div>
           </section>
         </section>
 
-        <section className="preview-panel" aria-label="Output preview">
+        <section className="preview-panel" aria-label="出力プレビュー">
           <div className="panel-heading">
-            <h2>Output</h2>
-            <span>{lines.length} lines</span>
+            <h2>出力</h2>
+            <span>{lines.length}行</span>
           </div>
           <div className="output-preview" role="textbox" aria-readonly="true" tabIndex={0}>
-            {!lines.length && <div className="output-empty">Output will appear here.</div>}
+            {!lines.length && <div className="output-empty">出力はここに表示されます。</div>}
             {lines.map((line, index) => (
               <div
                 key={`${index}-${line}`}

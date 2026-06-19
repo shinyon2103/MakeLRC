@@ -1,6 +1,6 @@
 # MakeLRC
 
-Web-based synchronized lyrics editor for creating LRC files while playing audio.
+音源を再生しながらタイミングに合わせて打刻し、LRC などの同期歌詞ファイルを作成する Web アプリです。
 
 ## Development
 
@@ -17,22 +17,22 @@ npm run build
 
 ## Current Prototype
 
-- Load a local audio file.
-- Type or paste lyrics into the lyrics box. Blank lines are removed automatically.
-- Press Space or tap the large timing area to stamp the current line.
-- Use Retake to jump a little before the current line timestamp and immediately retry.
-- Export as LRC, Enhanced LRC, WebVTT, or SRT.
-- Draft lyrics and timings are saved to `localStorage`.
+- ローカル音源を読み込み
+- 歌詞を入力または貼り付け。空行は自動削除
+- Space または大きな打刻エリアのタップで現在行を打刻
+- 打ち直しで現在行のタイムスタンプの少し前へ戻って再試行
+- LRC、Enhanced LRC、WebVTT、SRT として出力
+- 作業中の歌詞とタイミングを `localStorage` に一時保存
 
 ## Shortcuts
 
-- Space: stamp current line
-- Shift + Space: play / pause
-- R: retake current line
-- ArrowUp: previous line
-- ArrowDown: next line
-- J: back 3 seconds
-- K: forward 3 seconds
-- Ctrl / Cmd + Z: undo
-- Ctrl / Cmd + Y: redo
-- ?: show / hide help
+- Space: 現在行を打刻
+- Shift + Space: 再生 / 停止
+- R: 現在行を打ち直し
+- ArrowUp: 前の行
+- ArrowDown: 次の行
+- J: 3秒戻る
+- K: 3秒進む
+- Ctrl / Cmd + Z: 取消
+- Ctrl / Cmd + Y: やり直し
+- ?: ヘルプを表示 / 非表示
