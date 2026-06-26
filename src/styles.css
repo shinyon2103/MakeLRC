@@ -256,6 +256,21 @@ audio {
   line-height: 1.45;
 }
 
+.active-token {
+  display: inline;
+  border-radius: 4px;
+}
+
+.active-token.is-stamped {
+  color: var(--muted);
+}
+
+.active-token.is-current {
+  background: #d7ece6;
+  color: var(--ink);
+  box-shadow: 0 0 0 2px #d7ece6;
+}
+
 .tap-zone {
   display: grid;
   place-items: center;

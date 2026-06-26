@@ -4,6 +4,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 const STORAGE_KEY = "makelrc.autosave.v3";
 const RETAKE_MARGIN_SECONDS = 2.5;
 const SEEK_STEP_SECONDS = 3;
+const GAP_LINE_TEXT = "♪ 間奏";
 const AUDIO_FILE_EXTENSIONS = new Set([
   "aac",
   "aif",
@@ -22,23 +23,30 @@ const AUDIO_FILE_EXTENSIONS = new Set([
 ]);
 
 type OutputFormat = "lrc" | "enhanced-lrc" | "webvtt" | "srt";
+type TimingMode = "line" | "word" | "char";
 
 type Snapshot = {
   timings: Array<number | undefined>;
+  segmentTimings: Array<Array<number | undefined>>;
   activeIndex: number;
+  activeSegmentIndex: number;
 };
 
 type Draft = {
   lyrics: string;
   timings: Array<number | undefined>;
+  segmentTimings?: Array<Array<number | undefined>>;
   activeIndex: number;
+  activeSegmentIndex?: number;
   format: OutputFormat;
+  timingMode?: TimingMode;
 };
 
 type OutputRow = {
   index: number;
   text: string;
   time: number | undefined;
+  segmentTimings: Array<number | undefined>;
 };
 
 type OutputPreviewBlock = {
@@ -84,7 +92,23 @@ function formatWebVttTime(seconds: number | undefined) {
 }
 
 function getRows(lines: string[], timings: Array<number | undefined>): OutputRow[] {
-  return lines.map((text, index) => ({ index, text, time: timings[index] }));
+  return lines.map((text, index) => ({ index, text, time: timings[index], segmentTimings: [] }));
+}
+
+function getRowsWithSegments(
+  lines: string[],
+  timings: Array<number | undefined>,
+  segmentTimings: Array<Array<number | undefined>>,
+): OutputRow[] {
+  return lines.map((text, index) => {
+    const firstSegmentTime = segmentTimings[index]?.find((time) => Number.isFinite(time));
+    return {
+      index,
+      text,
+      time: Number.isFinite(timings[index]) ? timings[index] : firstSegmentTime,
+      segmentTimings: segmentTimings[index] ?? [],
+    };
+  });
 }
 
 function getCueRange(rows: OutputRow[], index: number) {
@@ -103,13 +127,29 @@ function tokenizeEnhancedText(text: string) {
   return Array.from(text);
 }
 
+function tokenizeForMode(text: string, mode: TimingMode) {
+  if (mode === "char") return Array.from(text);
+  return tokenizeEnhancedText(text);
+}
+
+function getEnhancedTokensForRow(row: OutputRow) {
+  const characterTokens = Array.from(row.text);
+  if (row.segmentTimings.length === characterTokens.length) return characterTokens;
+
+  return tokenizeEnhancedText(row.text);
+}
+
 function buildEnhancedLrcLine(row: OutputRow, rows: OutputRow[], index: number) {
   const { start, end } = getCueRange(rows, index);
-  const tokens = tokenizeEnhancedText(row.text);
+  const tokens = getEnhancedTokensForRow(row);
   const duration = Math.max(0.2, end - start);
   const step = tokens.length > 0 ? duration / tokens.length : 0;
   const taggedText = tokens
-    .map((token, tokenIndex) => `<${formatLrcTime(start + step * tokenIndex)}>${token}`)
+    .map((token, tokenIndex) => {
+      const segmentTime = row.segmentTimings[tokenIndex];
+      const time = Number.isFinite(segmentTime) ? segmentTime : start + step * tokenIndex;
+      return `<${formatLrcTime(time)}>${token}`;
+    })
     .join("");
 
   return `[${formatLrcTime(row.time)}]${taggedText}`;
@@ -118,9 +158,10 @@ function buildEnhancedLrcLine(row: OutputRow, rows: OutputRow[], index: number) 
 function buildOutputPreviewBlocks(
   lines: string[],
   timings: Array<number | undefined>,
+  segmentTimings: Array<Array<number | undefined>>,
   format: OutputFormat,
 ): OutputPreviewBlock[] {
-  const rows = getRows(lines, timings);
+  const rows = getRowsWithSegments(lines, timings, segmentTimings);
 
   if (format === "webvtt") {
     return [
@@ -167,7 +208,18 @@ function clampLineIndex(index: number, lineCount: number) {
 }
 
 function buildOutput(lines: string[], timings: Array<number | undefined>, format: OutputFormat) {
-  const blocks = buildOutputPreviewBlocks(lines, timings, format);
+  const blocks = buildOutputPreviewBlocks(lines, timings, [], format);
+  const separator = format === "srt" || format === "webvtt" ? "\n\n" : "\n";
+  return blocks.map((block) => block.lines.join("\n")).join(separator);
+}
+
+function buildConvertedOutput(
+  lines: string[],
+  timings: Array<number | undefined>,
+  segmentTimings: Array<Array<number | undefined>>,
+  format: OutputFormat,
+) {
+  const blocks = buildOutputPreviewBlocks(lines, timings, segmentTimings, format);
   const separator = format === "srt" || format === "webvtt" ? "\n\n" : "\n";
   return blocks.map((block) => block.lines.join("\n")).join(separator);
 }
@@ -180,8 +232,11 @@ function readDraft(): Draft | null {
     return {
       lyrics: normalizeLyrics(draft.lyrics ?? ""),
       timings: Array.isArray(draft.timings) ? draft.timings : [],
+      segmentTimings: Array.isArray(draft.segmentTimings) ? draft.segmentTimings : [],
       activeIndex: Number.isInteger(draft.activeIndex) ? draft.activeIndex ?? 0 : 0,
+      activeSegmentIndex: Number.isInteger(draft.activeSegmentIndex) ? draft.activeSegmentIndex ?? 0 : 0,
       format: draft.format ?? "lrc",
+      timingMode: draft.timingMode ?? "line",
     };
   } catch {
     return null;
@@ -208,10 +263,15 @@ export function App() {
   const [lyrics, setLyrics] = useState(initialDraft?.lyrics ?? "");
   const [lines, setLines] = useState(() => parseLines(initialDraft?.lyrics ?? ""));
   const [timings, setTimings] = useState<Array<number | undefined>>(initialDraft?.timings ?? []);
+  const [segmentTimings, setSegmentTimings] = useState<Array<Array<number | undefined>>>(
+    initialDraft?.segmentTimings ?? [],
+  );
   const [activeIndex, setActiveIndex] = useState(initialDraft?.activeIndex ?? 0);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState(initialDraft?.activeSegmentIndex ?? 0);
   const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
   const [redoStack, setRedoStack] = useState<Snapshot[]>([]);
   const [format, setFormat] = useState<OutputFormat>(initialDraft?.format ?? "lrc");
+  const [timingMode, setTimingMode] = useState<TimingMode>(initialDraft?.timingMode ?? "line");
   const [saveStatus, setSaveStatus] = useState(initialDraft ? "一時保存を復元" : "未保存");
   const [currentTime, setCurrentTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState("");
@@ -224,19 +284,34 @@ export function App() {
   const displayedCentisecondRef = useRef(-1);
 
   const outputPreviewBlocks = useMemo(
-    () => buildOutputPreviewBlocks(lines, timings, format),
-    [format, lines, timings],
+    () => buildOutputPreviewBlocks(lines, timings, segmentTimings, format),
+    [format, lines, segmentTimings, timings],
   );
-  const output = useMemo(() => buildOutput(lines, timings, format), [format, lines, timings]);
+  const output = useMemo(
+    () => buildConvertedOutput(lines, timings, segmentTimings, format),
+    [format, lines, segmentTimings, timings],
+  );
   const activeLine = lines[activeIndex] ?? "歌詞を入力してください";
+  const activeTokens = useMemo(
+    () => tokenizeForMode(lines[activeIndex] ?? "", timingMode),
+    [activeIndex, lines, timingMode],
+  );
 
   const pushUndo = useCallback(() => {
     setUndoStack((stack) => {
-      const next = [...stack, { timings: [...timings], activeIndex }];
+      const next = [
+        ...stack,
+        {
+          timings: [...timings],
+          segmentTimings: segmentTimings.map((items) => [...items]),
+          activeIndex,
+          activeSegmentIndex,
+        },
+      ];
       return next.length > 100 ? next.slice(1) : next;
     });
     setRedoStack([]);
-  }, [activeIndex, timings]);
+  }, [activeIndex, activeSegmentIndex, segmentTimings, timings]);
 
   const releaseButtonFocus = useCallback(() => {
     const activeElement = document.activeElement;
@@ -284,7 +359,9 @@ export function App() {
     setLyrics(normalized);
     setLines(nextLines);
     setTimings((current) => current.slice(0, nextLines.length));
+    setSegmentTimings((current) => current.slice(0, nextLines.length));
     setActiveIndex((index) => clampLineIndex(index, nextLines.length));
+    setActiveSegmentIndex(0);
   }, []);
 
   const stampCurrentLine = useCallback(() => {
@@ -292,31 +369,84 @@ export function App() {
     releaseButtonFocus();
     pushUndo();
     const audio = audioRef.current;
+    const stampTime = audio?.currentTime ?? 0;
+
+    if (timingMode !== "line") {
+      setSegmentTimings((current) => {
+        const next = current.map((items) => [...items]);
+        const tokens = tokenizeForMode(lines[activeIndex] ?? "", timingMode);
+        const lineTimings = [...(next[activeIndex] ?? [])];
+        lineTimings[activeSegmentIndex] = stampTime;
+        lineTimings.length = tokens.length;
+        next[activeIndex] = lineTimings;
+        return next;
+      });
+
+      if (activeSegmentIndex === 0) {
+        setTimings((current) => {
+          const next = [...current];
+          next[activeIndex] = stampTime;
+          return next;
+        });
+      }
+
+      const tokenCount = activeTokens.length;
+      if (activeSegmentIndex + 1 < tokenCount) {
+        setActiveSegmentIndex((index) => index + 1);
+      } else {
+        setActiveIndex((index) => clampLineIndex(index + 1, lines.length));
+        setActiveSegmentIndex(0);
+      }
+      return;
+    }
+
     setTimings((current) => {
       const next = [...current];
-      next[activeIndex] = audio?.currentTime ?? 0;
+      next[activeIndex] = stampTime;
       return next;
     });
     setActiveIndex((index) => clampLineIndex(index + 1, lines.length));
-  }, [activeIndex, lines.length, pushUndo, releaseButtonFocus]);
+    setActiveSegmentIndex(0);
+  }, [
+    activeIndex,
+    activeSegmentIndex,
+    activeTokens.length,
+    lines,
+    pushUndo,
+    releaseButtonFocus,
+    timingMode,
+  ]);
 
   const retakeCurrentLine = useCallback(() => {
     if (!lines.length) return;
     releaseButtonFocus();
     const audio = audioRef.current;
     if (!audio) return;
-    const currentStamp = timings[activeIndex];
+    const currentStamp = timingMode === "line"
+      ? timings[activeIndex]
+      : segmentTimings[activeIndex]?.[activeSegmentIndex] ?? timings[activeIndex];
     audio.currentTime = Number.isFinite(currentStamp)
       ? Math.max(0, (currentStamp ?? 0) - RETAKE_MARGIN_SECONDS)
       : Math.max(0, audio.currentTime - RETAKE_MARGIN_SECONDS);
     setSaveStatus("打ち直し準備");
     syncCurrentTime(true);
     void audio.play().then(startTimeLoop).catch(() => undefined);
-  }, [activeIndex, lines.length, releaseButtonFocus, startTimeLoop, syncCurrentTime, timings]);
+  }, [
+    activeIndex,
+    activeSegmentIndex,
+    lines.length,
+    releaseButtonFocus,
+    segmentTimings,
+    startTimeLoop,
+    syncCurrentTime,
+    timingMode,
+    timings,
+  ]);
 
   const moveActive = useCallback((delta: number) => {
     releaseButtonFocus();
     setActiveIndex((index) => clampLineIndex(index + delta, lines.length));
+    setActiveSegmentIndex(0);
   }, [lines.length, releaseButtonFocus]);
 
   const seekBy = useCallback((delta: number) => {
@@ -332,31 +462,74 @@ export function App() {
     setUndoStack((stack) => {
       const snapshot = stack.at(-1);
       if (!snapshot) return stack;
-      setRedoStack((redo) => [...redo, { timings: [...timings], activeIndex }]);
+      setRedoStack((redo) => [
+        ...redo,
+        {
+          timings: [...timings],
+          segmentTimings: segmentTimings.map((items) => [...items]),
+          activeIndex,
+          activeSegmentIndex,
+        },
+      ]);
       setTimings([...snapshot.timings]);
+      setSegmentTimings(snapshot.segmentTimings.map((items) => [...items]));
       setActiveIndex(clampLineIndex(snapshot.activeIndex, lines.length));
+      setActiveSegmentIndex(snapshot.activeSegmentIndex);
       return stack.slice(0, -1);
     });
-  }, [activeIndex, lines.length, releaseButtonFocus, timings]);
+  }, [activeIndex, activeSegmentIndex, lines.length, releaseButtonFocus, segmentTimings, timings]);
 
   const redo = useCallback(() => {
     releaseButtonFocus();
     setRedoStack((stack) => {
       const snapshot = stack.at(-1);
       if (!snapshot) return stack;
-      setUndoStack((undoItems) => [...undoItems, { timings: [...timings], activeIndex }]);
+      setUndoStack((undoItems) => [
+        ...undoItems,
+        {
+          timings: [...timings],
+          segmentTimings: segmentTimings.map((items) => [...items]),
+          activeIndex,
+          activeSegmentIndex,
+        },
+      ]);
       setTimings([...snapshot.timings]);
+      setSegmentTimings(snapshot.segmentTimings.map((items) => [...items]));
       setActiveIndex(clampLineIndex(snapshot.activeIndex, lines.length));
+      setActiveSegmentIndex(snapshot.activeSegmentIndex);
       return stack.slice(0, -1);
     });
-  }, [activeIndex, lines.length, releaseButtonFocus, timings]);
+  }, [activeIndex, activeSegmentIndex, lines.length, releaseButtonFocus, segmentTimings, timings]);
 
   const clearTimings = useCallback(() => {
     releaseButtonFocus();
     pushUndo();
     setTimings([]);
+    setSegmentTimings([]);
     setActiveIndex(0);
+    setActiveSegmentIndex(0);
   }, [pushUndo, releaseButtonFocus]);
+
+  const insertGapAfterCurrentLine = useCallback(() => {
+    releaseButtonFocus();
+    pushUndo();
+    const insertAt = lines.length ? activeIndex + 1 : 0;
+    const nextLines = [...lines.slice(0, insertAt), GAP_LINE_TEXT, ...lines.slice(insertAt)];
+    setLines(nextLines);
+    setLyrics(nextLines.join("\n"));
+    setTimings((current) => [
+      ...current.slice(0, insertAt),
+      undefined,
+      ...current.slice(insertAt),
+    ]);
+    setSegmentTimings((current) => [
+      ...current.slice(0, insertAt),
+      [],
+      ...current.slice(insertAt),
+    ]);
+    setActiveIndex(insertAt);
+    setActiveSegmentIndex(0);
+  }, [activeIndex, lines, pushUndo, releaseButtonFocus]);
 
   const togglePlayback = useCallback(() => {
     const audio = audioRef.current;
@@ -422,7 +595,15 @@ export function App() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       try {
-        const draft: Draft = { lyrics, timings, activeIndex, format };
+        const draft: Draft = {
+          lyrics,
+          timings,
+          segmentTimings,
+          activeIndex,
+          activeSegmentIndex,
+          format,
+          timingMode,
+        };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
         setSaveStatus("一時保存済み");
       } catch {
@@ -431,7 +612,7 @@ export function App() {
     }, 200);
     setSaveStatus("保存中...");
     return () => window.clearTimeout(timeout);
-  }, [activeIndex, format, lyrics, timings]);
+  }, [activeIndex, activeSegmentIndex, format, lyrics, segmentTimings, timingMode, timings]);
 
   useEffect(() => {
     const container = outputPreviewRef.current;
@@ -675,7 +856,20 @@ export function App() {
           <section className="timing-panel" aria-label="タイミング操作">
             <div className="timing-display">
               <span id="currentTime">{formatLrcTime(currentTime)}</span>
-              <strong id="activeLine">{activeLine}</strong>
+              <strong id="activeLine">
+                {timingMode === "line" || !activeTokens.length ? (
+                  activeLine
+                ) : (
+                  activeTokens.map((token, index) => (
+                    <span
+                      key={`${index}-${token}`}
+                      className={`active-token${index === activeSegmentIndex ? " is-current" : ""}${Number.isFinite(segmentTimings[activeIndex]?.[index]) ? " is-stamped" : ""}`}
+                    >
+                      {token}
+                    </span>
+                  ))
+                )}
+              </strong>
             </div>
             <button className="tap-zone" type="button" onMouseDown={preventButtonMouseFocus} onClick={stampCurrentLine}>
               <span>タップで打刻</span>
@@ -692,6 +886,20 @@ export function App() {
             </div>
             <div className="options-row">
               <label>
+                打刻単位
+                <select
+                  value={timingMode}
+                  onChange={(event) => {
+                    setTimingMode(event.target.value as TimingMode);
+                    setActiveSegmentIndex(0);
+                  }}
+                >
+                  <option value="line">行</option>
+                  <option value="word">単語</option>
+                  <option value="char">文字</option>
+                </select>
+              </label>
+              <label>
                 形式
                 <select value={format} onChange={(event) => setFormat(event.target.value as OutputFormat)}>
                   <option value="lrc">LRC</option>
@@ -700,6 +908,7 @@ export function App() {
                   <option value="srt">SRT</option>
                 </select>
               </label>
+              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={insertGapAfterCurrentLine}>間奏追加</button>
               <button type="button" onMouseDown={preventButtonMouseFocus} onClick={clearTimings}>時刻クリア</button>
             </div>
           </section>
