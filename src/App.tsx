@@ -456,9 +456,7 @@ export function App() {
     const currentSegmentIndex = activeSegmentIndexRef.current;
 
     if (effectiveTimingMode !== "line") {
-      if (currentSegmentIndex === 0) {
-        pushUndo();
-      }
+      pushUndo();
 
       const tokens = tokenizeForMode(lines[currentLineIndex] ?? "", effectiveTimingMode);
       setSegmentTimings((current) => {
@@ -527,32 +525,6 @@ export function App() {
     stampCurrentLine();
   }, [stampCurrentLine]);
 
-  const retakeCurrentLine = useCallback(() => {
-    if (!lines.length) return;
-    releaseButtonFocus();
-    const audio = audioRef.current;
-    if (!audio) return;
-    const currentStamp = effectiveTimingMode === "line"
-      ? timings[activeIndex]
-      : segmentTimings[activeIndex]?.[activeSegmentIndex] ?? timings[activeIndex];
-    audio.currentTime = Number.isFinite(currentStamp)
-      ? Math.max(0, (currentStamp ?? 0) - RETAKE_MARGIN_SECONDS)
-      : Math.max(0, audio.currentTime - RETAKE_MARGIN_SECONDS);
-    setSaveStatus("打ち直し準備");
-    syncCurrentTime(true);
-    void audio.play().then(startTimeLoop).catch(() => undefined);
-  }, [
-    activeIndex,
-    activeSegmentIndex,
-    lines.length,
-    releaseButtonFocus,
-    segmentTimings,
-    startTimeLoop,
-    syncCurrentTime,
-    effectiveTimingMode,
-    timings,
-  ]);
-
   const moveActive = useCallback((delta: number) => {
     releaseButtonFocus();
     const nextLineIndex = clampLineIndex(activeIndexRef.current + delta, lines.length);
@@ -575,6 +547,9 @@ export function App() {
     setUndoStack((stack) => {
       const snapshot = stack.at(-1);
       if (!snapshot) return stack;
+      const undoTargetTime = effectiveTimingMode === "line"
+        ? timings[snapshot.activeIndex]
+        : segmentTimings[snapshot.activeIndex]?.[snapshot.activeSegmentIndex] ?? timings[snapshot.activeIndex];
       setRedoStack((redo) => [
         ...redo,
         {
@@ -591,9 +566,24 @@ export function App() {
       activeSegmentIndexRef.current = snapshot.activeSegmentIndex;
       setActiveIndex(nextLineIndex);
       setActiveSegmentIndex(snapshot.activeSegmentIndex);
+      if (Number.isFinite(undoTargetTime) && audioRef.current) {
+        audioRef.current.currentTime = Math.max(0, (undoTargetTime ?? 0) - RETAKE_MARGIN_SECONDS);
+        syncCurrentTime(true);
+        void audioRef.current.play().then(startTimeLoop).catch(() => undefined);
+      }
       return stack.slice(0, -1);
     });
-  }, [activeIndex, activeSegmentIndex, lines.length, releaseButtonFocus, segmentTimings, timings]);
+  }, [
+    activeIndex,
+    activeSegmentIndex,
+    effectiveTimingMode,
+    lines.length,
+    releaseButtonFocus,
+    segmentTimings,
+    startTimeLoop,
+    syncCurrentTime,
+    timings,
+  ]);
 
   const redo = useCallback(() => {
     releaseButtonFocus();
@@ -808,12 +798,6 @@ export function App() {
         return;
       }
 
-      if (key === "r") {
-        event.preventDefault();
-        retakeCurrentLine();
-        return;
-      }
-
       if (event.code === "ArrowUp") {
         event.preventDefault();
         moveActive(-1);
@@ -865,7 +849,7 @@ export function App() {
       document.removeEventListener("keydown", onKeyDown, { capture: true });
       document.removeEventListener("keyup", onKeyUp, { capture: true });
     };
-  }, [moveActive, redo, retakeCurrentLine, seekBy, stampCurrentLine, togglePlayback, undo]);
+  }, [moveActive, redo, seekBy, stampCurrentLine, togglePlayback, undo]);
 
   useEffect(() => {
     let lastTouchEnd = 0;
@@ -894,11 +878,11 @@ export function App() {
             <p>{saveStatus}</p>
           </div>
           <div className="topbar-actions">
-            <button type="button" aria-expanded={helpOpen} onMouseDown={preventButtonMouseFocus} onClick={() => setHelpOpen((open) => !open)}>
+            <button type="button" className="topbar-action-button hint-action" aria-expanded={helpOpen} onMouseDown={preventButtonMouseFocus} onClick={() => setHelpOpen((open) => !open)}>
               ヘルプ
             </button>
-            <button type="button" onMouseDown={preventButtonMouseFocus} onClick={copyOutput}>コピー</button>
-            <button type="button" onMouseDown={preventButtonMouseFocus} onClick={downloadOutput}>保存</button>
+            <button type="button" className="topbar-action-button copy-action" onMouseDown={preventButtonMouseFocus} onClick={copyOutput}>コピー</button>
+            <button type="button" className="topbar-action-button save-action" onMouseDown={preventButtonMouseFocus} onClick={downloadOutput}>保存</button>
           </div>
         </header>
 
@@ -908,11 +892,10 @@ export function App() {
             <div className="shortcut-grid">
               <span><kbd>Space</kbd></span><span>現在行を打刻</span>
               <span><kbd>Shift</kbd> + <kbd>Space</kbd></span><span>再生 / 停止</span>
-              <span><kbd>R</kbd></span><span>現在行の少し前へ戻って打ち直し</span>
               <span><kbd>ArrowUp</kbd> / <kbd>ArrowDown</kbd></span><span>前の行 / 次の行</span>
               <span><kbd>J</kbd> / <kbd>K</kbd></span><span>3秒戻る / 3秒進む</span>
-              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Z</kbd></span><span>取消</span>
-              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Y</kbd></span><span>やり直し</span>
+              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Z</kbd></span><span>1つ戻す</span>
+              <span><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Y</kbd></span><span>1つ進める</span>
               <span><kbd>?</kbd></span><span>ヘルプを表示 / 非表示</span>
             </div>
           </section>
@@ -1007,14 +990,13 @@ export function App() {
               <span>タップで打刻</span>
             </button>
             <div className="control-grid">
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={togglePlayback}>再生/停止</button>
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={retakeCurrentLine}>打ち直し</button>
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={() => moveActive(-1)}>前へ</button>
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={() => moveActive(1)}>次へ</button>
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={() => seekBy(-SEEK_STEP_SECONDS)}>-3秒</button>
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={() => seekBy(SEEK_STEP_SECONDS)}>+3秒</button>
-              <button type="button" disabled={!undoStack.length} onMouseDown={preventButtonMouseFocus} onClick={undo}>取消</button>
-              <button type="button" disabled={!redoStack.length} onMouseDown={preventButtonMouseFocus} onClick={redo}>やり直し</button>
+              <button type="button" className="control-button play-action" onMouseDown={preventButtonMouseFocus} onClick={togglePlayback}>再生/停止</button>
+              <button type="button" className="control-button previous-action" onMouseDown={preventButtonMouseFocus} onClick={() => moveActive(-1)}>前の行</button>
+              <button type="button" className="control-button next-action" onMouseDown={preventButtonMouseFocus} onClick={() => moveActive(1)}>次の行</button>
+              <button type="button" className="control-button rewind-action" onMouseDown={preventButtonMouseFocus} onClick={() => seekBy(-SEEK_STEP_SECONDS)}>3秒戻る</button>
+              <button type="button" className="control-button forward-action" onMouseDown={preventButtonMouseFocus} onClick={() => seekBy(SEEK_STEP_SECONDS)}>3秒進む</button>
+              <button type="button" className="control-button undo-action" disabled={!undoStack.length} onMouseDown={preventButtonMouseFocus} onClick={undo}>1つ戻す</button>
+              <button type="button" className="control-button redo-action" disabled={!redoStack.length} onMouseDown={preventButtonMouseFocus} onClick={redo}>1つ進める</button>
             </div>
             <div className="options-row">
               <label>
@@ -1052,8 +1034,8 @@ export function App() {
                   <option value="srt">SRT</option>
                 </select>
               </label>
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={insertGapAfterCurrentLine}>間奏追加</button>
-              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={clearTimings}>時刻クリア</button>
+              <button type="button" onMouseDown={preventButtonMouseFocus} onClick={insertGapAfterCurrentLine}>間奏を追加</button>
+              <button type="button" className="danger-action" onMouseDown={preventButtonMouseFocus} onClick={clearTimings}>全時刻クリア</button>
             </div>
           </section>
         </section>

@@ -148,6 +148,31 @@ h2 {
   flex-wrap: wrap;
 }
 
+.topbar-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+}
+
+.topbar-action-button::before {
+  color: var(--accent);
+  font-size: 1.05em;
+  line-height: 1;
+}
+
+.hint-action::before {
+  content: "?";
+}
+
+.copy-action::before {
+  content: "⧉";
+}
+
+.save-action::before {
+  content: "↓";
+}
+
 .help-panel {
   padding: 12px;
   display: grid;
@@ -306,10 +331,53 @@ audio {
   gap: 8px;
 }
 
-.control-grid button:nth-child(2) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+.control-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+}
+
+.control-button::before {
+  color: var(--accent);
+  font-size: 1.05em;
+  line-height: 1;
+}
+
+.control-button:disabled::before {
+  color: currentColor;
+}
+
+.play-action {
+  grid-column: span 2;
+}
+
+.play-action::before {
+  content: "▶";
+}
+
+.previous-action::before {
+  content: "↑";
+}
+
+.next-action::before {
+  content: "↓";
+}
+
+.rewind-action::before {
+  content: "↺";
+}
+
+.forward-action::before {
+  content: "↻";
+}
+
+.undo-action::before {
+  content: "↶";
+}
+
+.redo-action::before {
+  content: "↷";
 }
 
 .options-row {
@@ -320,6 +388,11 @@ audio {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.danger-action {
+  border-color: #f1c9c0;
+  color: #9f3a2f;
 }
 
 select {
