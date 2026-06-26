@@ -184,6 +184,11 @@ kbd {
   align-items: center;
 }
 
+.audio-panel.is-dragging {
+  border-color: var(--accent);
+  background: #f0faf7;
+}
+
 .file-picker {
   display: grid;
   place-items: center;

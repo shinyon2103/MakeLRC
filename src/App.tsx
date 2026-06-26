@@ -4,6 +4,22 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 const STORAGE_KEY = "makelrc.autosave.v3";
 const RETAKE_MARGIN_SECONDS = 2.5;
 const SEEK_STEP_SECONDS = 3;
+const AUDIO_FILE_EXTENSIONS = new Set([
+  "aac",
+  "aif",
+  "aiff",
+  "caf",
+  "flac",
+  "m4a",
+  "mp3",
+  "mp4",
+  "oga",
+  "ogg",
+  "opus",
+  "wav",
+  "weba",
+  "webm",
+]);
 
 type OutputFormat = "lrc" | "enhanced-lrc" | "webvtt" | "srt";
 
@@ -111,6 +127,12 @@ function isEditableTarget(target: EventTarget | null) {
   );
 }
 
+function isLikelyAudioFile(file: File) {
+  if (file.type.startsWith("audio/")) return true;
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  return extension ? AUDIO_FILE_EXTENSIONS.has(extension) : false;
+}
+
 export function App() {
   const initialDraft = useMemo(readDraft, []);
   const [lyrics, setLyrics] = useState(initialDraft?.lyrics ?? "");
@@ -123,6 +145,7 @@ export function App() {
   const [saveStatus, setSaveStatus] = useState(initialDraft ? "一時保存を復元" : "未保存");
   const [currentTime, setCurrentTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState("");
+  const [isAudioDragging, setIsAudioDragging] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const outputPreviewRef = useRef<HTMLDivElement | null>(null);
@@ -307,6 +330,20 @@ export function App() {
     anchor.click();
     URL.revokeObjectURL(url);
   }, [format, output]);
+
+  const loadAudioFile = useCallback((file: File) => {
+    if (!isLikelyAudioFile(file)) {
+      setSaveStatus("音源ファイルを選択してください");
+      return;
+    }
+
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    const nextUrl = URL.createObjectURL(file);
+    setAudioUrl(nextUrl);
+    setCurrentTime(0);
+    displayedCentisecondRef.current = -1;
+    setSaveStatus(file.name);
+  }, [audioUrl]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -501,19 +538,38 @@ export function App() {
           </section>
         )}
 
-        <section className="audio-panel" aria-label="音源">
+        <section
+          className={`audio-panel${isAudioDragging ? " is-dragging" : ""}`}
+          aria-label="音源"
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setIsAudioDragging(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setIsAudioDragging(false);
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsAudioDragging(false);
+            const file = event.dataTransfer.files[0];
+            if (file) loadAudioFile(file);
+          }}
+        >
           <label className="file-picker">
             <span>音源を選択</span>
             <input
               type="file"
-              accept="audio/*"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;
-                if (audioUrl) URL.revokeObjectURL(audioUrl);
-                const nextUrl = URL.createObjectURL(file);
-                setAudioUrl(nextUrl);
-                setSaveStatus(file.name);
+                loadAudioFile(file);
+                event.currentTarget.value = "";
               }}
             />
           </label>
