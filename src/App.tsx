@@ -9,6 +9,7 @@ const STORAGE_KEY = "makelrc.autosave.v3";
 const RETAKE_MARGIN_SECONDS = 2.5;
 const SEEK_STEP_SECONDS = 3;
 const GAP_LINE_TEXT = "♪ 間奏";
+const SMALL_KANA_PATTERN = /^[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮゕゖヶ]$/;
 const AUDIO_FILE_EXTENSIONS = new Set([
   "aac",
   "aif",
@@ -135,6 +136,10 @@ function containsJapaneseText(text: string) {
   return /[\u3040-\u30ff\u3400-\u9fff]/.test(text);
 }
 
+function canFormatUseDetailedTiming(format: OutputFormat) {
+  return format === "enhanced-lrc";
+}
+
 function tokenizeCharactersSkippingStandaloneSpaces(text: string) {
   const tokens: string[] = [];
   let pendingSpaces = "";
@@ -146,6 +151,12 @@ function tokenizeCharactersSkippingStandaloneSpaces(text: string) {
       } else {
         pendingSpaces += character;
       }
+      continue;
+    }
+
+    if (SMALL_KANA_PATTERN.test(character) && tokens.length) {
+      tokens[tokens.length - 1] += `${pendingSpaces}${character}`;
+      pendingSpaces = "";
       continue;
     }
 
@@ -303,6 +314,11 @@ function isLikelyAudioFile(file: File) {
 
 export function App() {
   const initialDraft = useMemo(readDraft, []);
+  const initialFormat = initialDraft?.format ?? "lrc";
+  const initialTimingMode = canFormatUseDetailedTiming(initialFormat)
+    ? initialDraft?.timingMode ?? "line"
+    : "line";
+  const initialActiveSegmentIndex = initialTimingMode === "line" ? 0 : initialDraft?.activeSegmentIndex ?? 0;
   const [lyrics, setLyrics] = useState(initialDraft?.lyrics ?? "");
   const [lines, setLines] = useState(() => parseLines(initialDraft?.lyrics ?? ""));
   const [timings, setTimings] = useState<Array<number | undefined>>(initialDraft?.timings ?? []);
@@ -310,11 +326,11 @@ export function App() {
     initialDraft?.segmentTimings ?? [],
   );
   const [activeIndex, setActiveIndex] = useState(initialDraft?.activeIndex ?? 0);
-  const [activeSegmentIndex, setActiveSegmentIndex] = useState(initialDraft?.activeSegmentIndex ?? 0);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState(initialActiveSegmentIndex);
   const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
   const [redoStack, setRedoStack] = useState<Snapshot[]>([]);
-  const [format, setFormat] = useState<OutputFormat>(initialDraft?.format ?? "lrc");
-  const [timingMode, setTimingMode] = useState<TimingMode>(initialDraft?.timingMode ?? "line");
+  const [format, setFormat] = useState<OutputFormat>(initialFormat);
+  const [timingMode, setTimingMode] = useState<TimingMode>(initialTimingMode);
   const [saveStatus, setSaveStatus] = useState(initialDraft ? "一時保存を復元" : "未保存");
   const [currentTime, setCurrentTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState("");
@@ -326,8 +342,10 @@ export function App() {
   const animationFrameRef = useRef<number | null>(null);
   const displayedCentisecondRef = useRef(-1);
   const activeIndexRef = useRef(initialDraft?.activeIndex ?? 0);
-  const activeSegmentIndexRef = useRef(initialDraft?.activeSegmentIndex ?? 0);
+  const activeSegmentIndexRef = useRef(initialActiveSegmentIndex);
   const lastImmediateStampRef = useRef(0);
+  const canUseDetailedTiming = canFormatUseDetailedTiming(format);
+  const effectiveTimingMode: TimingMode = canUseDetailedTiming ? timingMode : "line";
 
   const outputPreviewBlocks = useMemo(
     () => buildOutputPreviewBlocks(lines, timings, [], format, { compactEnhanced: true }),
@@ -335,8 +353,8 @@ export function App() {
   );
   const activeLine = lines[activeIndex] ?? "歌詞を入力してください";
   const activeTokens = useMemo(
-    () => tokenizeForMode(lines[activeIndex] ?? "", timingMode),
-    [activeIndex, lines, timingMode],
+    () => tokenizeForMode(lines[activeIndex] ?? "", effectiveTimingMode),
+    [activeIndex, effectiveTimingMode, lines],
   );
 
   useEffect(() => {
@@ -346,6 +364,14 @@ export function App() {
   useEffect(() => {
     activeSegmentIndexRef.current = activeSegmentIndex;
   }, [activeSegmentIndex]);
+
+  useEffect(() => {
+    if (canUseDetailedTiming) return;
+    if (timingMode !== "line") setTimingMode("line");
+    if (activeSegmentIndexRef.current === 0) return;
+    activeSegmentIndexRef.current = 0;
+    setActiveSegmentIndex(0);
+  }, [canUseDetailedTiming, timingMode]);
 
   const pushUndo = useCallback(() => {
     setUndoStack((stack) => {
@@ -422,12 +448,12 @@ export function App() {
     const currentLineIndex = clampLineIndex(activeIndexRef.current, lines.length);
     const currentSegmentIndex = activeSegmentIndexRef.current;
 
-    if (timingMode !== "line") {
+    if (effectiveTimingMode !== "line") {
       if (currentSegmentIndex === 0) {
         pushUndo();
       }
 
-      const tokens = tokenizeForMode(lines[currentLineIndex] ?? "", timingMode);
+      const tokens = tokenizeForMode(lines[currentLineIndex] ?? "", effectiveTimingMode);
       setSegmentTimings((current) => {
         const next = [...current];
         const lineTimings = [...(next[currentLineIndex] ?? [])];
@@ -471,7 +497,7 @@ export function App() {
     activeSegmentIndexRef.current = 0;
     setActiveIndex(nextLineIndex);
     setActiveSegmentIndex(0);
-  }, [lines, pushUndo, releaseButtonFocus, timingMode]);
+  }, [effectiveTimingMode, lines, pushUndo, releaseButtonFocus]);
 
   const stampFromImmediateInput = useCallback((event: ReactPointerEvent<HTMLButtonElement> | ReactTouchEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -499,7 +525,7 @@ export function App() {
     releaseButtonFocus();
     const audio = audioRef.current;
     if (!audio) return;
-    const currentStamp = timingMode === "line"
+    const currentStamp = effectiveTimingMode === "line"
       ? timings[activeIndex]
       : segmentTimings[activeIndex]?.[activeSegmentIndex] ?? timings[activeIndex];
     audio.currentTime = Number.isFinite(currentStamp)
@@ -516,7 +542,7 @@ export function App() {
     segmentTimings,
     startTimeLoop,
     syncCurrentTime,
-    timingMode,
+    effectiveTimingMode,
     timings,
   ]);
 
@@ -949,7 +975,7 @@ export function App() {
             <div className="timing-display">
               <span id="currentTime">{formatLrcTime(currentTime)}</span>
               <strong id="activeLine">
-                {timingMode === "line" || !activeTokens.length ? activeLine : (
+                {effectiveTimingMode === "line" || !activeTokens.length ? activeLine : (
                   <>
                     {activeTokens.map((token, index) => (
                       <span
@@ -988,6 +1014,7 @@ export function App() {
                 打刻単位
                 <select
                   value={timingMode}
+                  disabled={!canUseDetailedTiming}
                   onChange={(event) => {
                     setTimingMode(event.target.value as TimingMode);
                     activeSegmentIndexRef.current = 0;
@@ -1000,7 +1027,18 @@ export function App() {
               </label>
               <label>
                 形式
-                <select value={format} onChange={(event) => setFormat(event.target.value as OutputFormat)}>
+                <select
+                  value={format}
+                  onChange={(event) => {
+                    const nextFormat = event.target.value as OutputFormat;
+                    setFormat(nextFormat);
+                    if (!canFormatUseDetailedTiming(nextFormat)) {
+                      setTimingMode("line");
+                      activeSegmentIndexRef.current = 0;
+                      setActiveSegmentIndex(0);
+                    }
+                  }}
+                >
                   <option value="lrc">LRC</option>
                   <option value="enhanced-lrc">Enhanced LRC</option>
                   <option value="webvtt">WebVTT</option>
