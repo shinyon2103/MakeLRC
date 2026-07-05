@@ -1,0 +1,28 @@
+# Repository and development metadata
+.git/
+.github/
+.agents/
+.codex/
+.wrangler/
+.assetsignore
+.gitignore
+README.md
+
+# Source code and build configuration
+src/
+public/
+node_modules/
+package.json
+package-lock.json
+tsconfig*.json
+tsconfig*.tsbuildinfo
+vite.config.*
+wrangler.json
+wrangler.jsonc
+wrangler.toml
+
+# Local-only files and generated diagnostics
+.env
+.env.*
+*.log
+*.map
