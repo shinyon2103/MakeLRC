@@ -1186,7 +1186,14 @@ export function App() {
             <h2>{text.output}</h2>
             <span>{lines.length}{text.lineCount} / {format}</span>
           </div>
-          <div ref={outputPreviewRef} className="output-preview" role="textbox" aria-readonly="true" tabIndex={0}>
+          <div
+            ref={outputPreviewRef}
+            className="output-preview"
+            role="textbox"
+            aria-label={text.outputPreview}
+            aria-readonly="true"
+            tabIndex={0}
+          >
             {!lines.length && <div className="output-empty">{text.outputEmpty}</div>}
             {outputPreviewBlocks.map((block) => (
               <div
