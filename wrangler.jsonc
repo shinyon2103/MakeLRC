@@ -3,7 +3,7 @@
   "name": "make-lrc",
   "compatibility_date": "2026-07-05",
   "assets": {
-    "directory": "./dist",
+    "directory": "./make-lrc",
     "not_found_handling": "single-page-application"
   }
 }
